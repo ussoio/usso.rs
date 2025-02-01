@@ -7,7 +7,6 @@ description = "The usso provides a universal single sign-on (SSO) integration fo
 homepage = "https://usso.io"
 readme = "README.md"
 license = "MIT"
-license-file = "LICENCE.txt"
 repository = "https://github.com/ussoio/usso.rs.git"
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
