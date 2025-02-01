@@ -1,0 +1,20 @@
+[package]
+name = "usso"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.12.12", features = ["blocking", "json"] }
+tokio = { version = "1.0", features = ["full"] }
+jsonwebtoken = "9.3.0"
+uuid = { version = "1.0", features = ["v4"] }
+base64 = "0.22"
+thiserror = "2.0.11"
+
+[dev-dependencies]
+mockall = "0.13.1"
+tokio-test = "0.4"
+mockito = "1.6.1"
+
