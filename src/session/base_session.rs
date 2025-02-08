@@ -39,7 +39,11 @@ impl BaseUssoSession {
     }
 
     pub fn request(&self, method: Method, url: &String) -> Result<String, SessionError> {
-        let response = self.client.request(method, url).send().map_err(SessionError::HttpError)?;
+        let response = self
+            .client
+            .request(method, url)
+            .send()
+            .map_err(SessionError::HttpError)?;
         response.text().map_err(SessionError::HttpError)
     }
 }

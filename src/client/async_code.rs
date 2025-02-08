@@ -3,8 +3,8 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::core::Usso;
-use crate::schemas::UserData;
 use crate::exceptions::USSOError;
+use crate::schemas::UserData;
 
 #[derive(Error, Debug)]
 pub enum ClientError {
@@ -37,7 +37,12 @@ impl AsyncUssoClient {
 
     pub async fn get_users(&self) -> Result<Vec<UserData>, ClientError> {
         let url = format!("{}/website/users", self.base_url);
-        let response = self.client.get(&url).send().await.map_err(ClientError::HttpError)?;
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(ClientError::HttpError)?;
         let users: Vec<Value> = response.json().await.map_err(ClientError::HttpError)?;
         Ok(users
             .into_iter()

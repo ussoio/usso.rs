@@ -1,16 +1,16 @@
-use std::sync::OnceLock;
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum JwksError {
     #[error("HTTP error: {0}")]
     ReqwestError(#[from] reqwest::Error),
-    
+
     #[error("Invalid JWKS data: {0}")]
     InvalidJwksData(String),
-    
+
     #[error("JWKS not initialized")]
     NotInitialized,
 }
@@ -34,7 +34,9 @@ static JWKS_CACHE: OnceLock<Jwks> = OnceLock::new();
 
 pub fn init_jwks(jwk_url: &str) -> Result<(), JwksError> {
     let jwks = fetch_jwks(jwk_url)?;
-    JWKS_CACHE.set(jwks).map_err(|_| JwksError::InvalidJwksData("Failed to set JWKS cache".into()))?;
+    JWKS_CACHE
+        .set(jwks)
+        .map_err(|_| JwksError::InvalidJwksData("Failed to set JWKS cache".into()))?;
     Ok(())
 }
 

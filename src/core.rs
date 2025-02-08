@@ -6,8 +6,11 @@ use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use crate::exceptions::USSOError;
 use crate::schemas::{JWTConfig, UserData};
 
-
-pub fn decode_token(key: &str, token: &str, algorithms: &[Algorithm]) -> Result<UserData, USSOError> {
+pub fn decode_token(
+    key: &str,
+    token: &str,
+    algorithms: &[Algorithm],
+) -> Result<UserData, USSOError> {
     let decoding_key = DecodingKey::from_secret(key.as_bytes());
     let mut validation = Validation::new(Algorithm::RS256);
     validation.algorithms = algorithms.to_vec();
@@ -23,14 +26,26 @@ pub fn is_expired(token: &str) -> Result<bool, USSOError> {
         token,
         &DecodingKey::from_secret(&[]),
         &Validation::default(),
-    ).expect("wtf core");
+    )
+    .expect("wtf core");
 
-    let exp = decoded.claims
+    let exp = decoded
+        .claims
         .get("exp")
         .and_then(|v| v.as_i64())
-        .unwrap_or_else(|| SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64 + 86400);
+        .unwrap_or_else(|| {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64
+                + 86400
+        });
 
-    Ok(exp < SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64)
+    Ok(exp
+        < SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64)
 }
 
 pub struct Usso {
@@ -38,7 +53,11 @@ pub struct Usso {
 }
 
 impl Usso {
-    pub fn new(jwt_config: Option<JWTConfig>, jwk_url: Option<String>, secret: Option<String>) -> Self {
+    pub fn new(
+        jwt_config: Option<JWTConfig>,
+        jwk_url: Option<String>,
+        secret: Option<String>,
+    ) -> Self {
         let jwt_configs = Self::initialize_configs(jwt_config, jwk_url, secret);
         Usso { jwt_configs }
     }
