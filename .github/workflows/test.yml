@@ -1,0 +1,26 @@
+name: test on push
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  test:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Verify build
+        run: cargo build --release -j $(nproc)
+
+      - name: Run tests
+        run: cargo test --release -j $(nproc)
