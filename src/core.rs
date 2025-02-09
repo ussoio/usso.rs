@@ -55,6 +55,7 @@ pub fn decode_token_with_jwks(_jwk_url: &str, token: &str) -> Result<UserData, U
         .expect("Can't find key with this kid in jwks");
     decode_token(key, token, &[Algorithm::RS256])
 }
+#[derive(Debug,Clone)]
 pub struct Usso {
     jwt_configs: Vec<JWTConfig>,
 }
