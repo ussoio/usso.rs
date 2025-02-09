@@ -4,7 +4,7 @@ use jsonwebtoken::Algorithm;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug,Clone)]
 pub struct UserData {
     pub user_id: String,
     pub workspace_id: Option<String>,
@@ -30,7 +30,7 @@ impl UserData {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug,Clone)]
 pub struct JWTConfig {
     pub jwk_url: Option<String>,
     pub keys: Option<Jwks>,
@@ -87,7 +87,7 @@ impl Jwks {
         self.keys.iter().find(|key| key.kid == kid)
     }
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize,Clone)]
 pub struct JwtHeader {
     pub alg: String,
     pub typ: Option<String>,
