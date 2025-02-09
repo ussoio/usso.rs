@@ -33,13 +33,13 @@ impl UserData {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct JWTConfig {
     pub jwk_url: Option<String>,
-    pub keys: Jwks,
+    pub keys: Option<Jwks>,
     pub algorithm: String,
     pub header: std::collections::HashMap<String, String>,
 }
 
 impl JWTConfig {
-    pub fn new(jwk_url: Option<String>, keys: Jwks) -> Self {
+    pub fn new(jwk_url: Option<String>, keys: Option<Jwks>) -> Self {
         JWTConfig {
             jwk_url,
             keys,
@@ -52,10 +52,16 @@ impl JWTConfig {
         let header = JwtHeader::from_token(token).unwrap();
         match header.kid {
             Some(kid) => {
-                let key = self.keys.match_kid(kid.as_str());
-                match key {
-                    Some(key) => crate::core::decode_token(key, token, &[Algorithm::RS256]),
-                    None => Err(crate::exceptions::USSOError::InvalidToken),
+                if let Some(keyset) = &self.keys {
+                    let key = keyset.match_kid(kid.as_str());
+                    match key {
+                        Some(key) => crate::core::decode_token(key, token, &[Algorithm::RS256]),
+                        None => Err(crate::exceptions::USSOError::InvalidToken),
+                    }
+                } else {
+                    Err(crate::exceptions::USSOError::Other(String::from(
+                        "keyset is not set",
+                    )))
                 }
             }
             None => Err(crate::exceptions::USSOError::InvalidToken),

@@ -73,12 +73,10 @@ impl Usso {
         if let Some(config) = jwt_config {
             vec![config]
         } else if let Some(url) = jwk_url {
-            vec![JWTConfig::new(
-                Some(url.clone()),
-                fetch_jwks(url.as_str()).unwrap(),
-            )]
+            let res = Some(fetch_jwks(url.as_str()).unwrap());
+            vec![JWTConfig::new(Some(url.clone()), res)]
         } else if let Some(keyset) = key {
-            vec![JWTConfig::new(None, keyset)]
+            vec![JWTConfig::new(None, Some(keyset))]
         } else {
             panic!("Provide jwt_config, jwk_url, or keys");
         }
