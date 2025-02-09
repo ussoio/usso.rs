@@ -11,5 +11,5 @@ pub fn b64_encode_uuid_strip(uuid: Uuid) -> String {
 
 pub fn b64_decode_uuid(encoded: &str) -> Result<Uuid, base64::DecodeError> {
     let decoded = URL_SAFE.decode(encoded)?;
-    Ok(Uuid::from_slice(&decoded).expect("wtf in b64"))
+    Ok(Uuid::from_slice(&decoded).expect("base64 is invalid!"))
 }

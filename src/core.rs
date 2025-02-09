@@ -4,14 +4,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
 use crate::exceptions::USSOError;
-use crate::schemas::{JWTConfig, UserData};
+use crate::jwks::{fetch_jwks, get_jwk_keys};
+use crate::schemas::{JWTConfig, Jwk, Jwks, UserData};
 
 pub fn decode_token(
-    key: &str,
+    key: &Jwk,
     token: &str,
     algorithms: &[Algorithm],
 ) -> Result<UserData, USSOError> {
-    let decoding_key = DecodingKey::from_secret(key.as_bytes());
+    let decoding_key = DecodingKey::from_rsa_components(&key.n, &key.e).unwrap();
     let mut validation = Validation::new(Algorithm::RS256);
     validation.algorithms = algorithms.to_vec();
 
@@ -27,7 +28,7 @@ pub fn is_expired(token: &str) -> Result<bool, USSOError> {
         &DecodingKey::from_secret(&[]),
         &Validation::default(),
     )
-    .expect("wtf core");
+    .expect("error in decode");
 
     let exp = decoded
         .claims
@@ -47,34 +48,39 @@ pub fn is_expired(token: &str) -> Result<bool, USSOError> {
             .unwrap()
             .as_secs() as i64)
 }
-
+pub fn decode_token_with_jwks(_jwk_url: &str, token: &str) -> Result<UserData, USSOError> {
+    let jwk_keys = get_jwk_keys().expect("Can't get keys");
+    let key = jwk_keys
+        .match_kid(token)
+        .expect("Can't find key with this kid in jwks");
+    decode_token(key, token, &[Algorithm::RS256])
+}
 pub struct Usso {
     jwt_configs: Vec<JWTConfig>,
 }
 
 impl Usso {
-    pub fn new(
-        jwt_config: Option<JWTConfig>,
-        jwk_url: Option<String>,
-        secret: Option<String>,
-    ) -> Self {
-        let jwt_configs = Self::initialize_configs(jwt_config, jwk_url, secret);
+    pub fn new(jwt_config: Option<JWTConfig>, jwk_url: Option<String>, key: Option<Jwks>) -> Self {
+        let jwt_configs = Self::initialize_configs(jwt_config, jwk_url, key);
         Usso { jwt_configs }
     }
 
     fn initialize_configs(
         jwt_config: Option<JWTConfig>,
         jwk_url: Option<String>,
-        secret: Option<String>,
+        key: Option<Jwks>,
     ) -> Vec<JWTConfig> {
         if let Some(config) = jwt_config {
             vec![config]
         } else if let Some(url) = jwk_url {
-            vec![JWTConfig::new(Some(url), None)]
-        } else if let Some(sec) = secret {
-            vec![JWTConfig::new(None, Some(sec))]
+            vec![JWTConfig::new(
+                Some(url.clone()),
+                fetch_jwks(url.as_str()).unwrap(),
+            )]
+        } else if let Some(keyset) = key {
+            vec![JWTConfig::new(None, keyset)]
         } else {
-            panic!("Provide jwt_config, jwk_url, or secret");
+            panic!("Provide jwt_config, jwk_url, or keys");
         }
     }
 
