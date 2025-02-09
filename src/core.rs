@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
 use crate::exceptions::USSOError;
-use crate::jwks::{fetch_jwks, get_jwk_keys};
+use crate::jwks::{fetch_jwks_sync, get_jwk_keys};
 use crate::schemas::{JWTConfig, Jwk, Jwks, UserData};
 
 pub fn decode_token(
@@ -73,7 +73,7 @@ impl Usso {
         if let Some(config) = jwt_config {
             vec![config]
         } else if let Some(url) = jwk_url {
-            let res = Some(fetch_jwks(url.as_str()).unwrap());
+            let res = Some(fetch_jwks_sync(url.as_str()).unwrap());
             vec![JWTConfig::new(Some(url.clone()), res)]
         } else if let Some(keyset) = key {
             vec![JWTConfig::new(None, Some(keyset))]
