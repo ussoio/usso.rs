@@ -1,6 +1,6 @@
 [package]
 name = "usso"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2021"
 authors = ["hikari <mps.parsa.mps@gmail.com>"]
 description = "The usso provides a universal single sign-on (SSO) integration for microservices, making it easy to add secure, scalable authentication across different frameworks. This client simplifies the process of connecting any microservice to the USSO service."

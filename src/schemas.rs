@@ -1,4 +1,4 @@
-use crate::exceptions::JwtError;
+use crate::{exceptions::JwtError, utils::b64tools::b64_decode_uuid};
 use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine};
 use jsonwebtoken::Algorithm;
 use serde::{Deserialize, Serialize};
@@ -26,7 +26,15 @@ impl UserData {
     }
 
     pub fn uid(&self) -> Uuid {
-        Uuid::parse_str(&self.user_id).unwrap()
+        let mut user_id = String::new();
+        if self.user_id.starts_with("u_") {
+            user_id = self.user_id[2..].to_string();
+        }
+
+        if (22..=24).contains(&user_id.len()) {
+            return b64_decode_uuid(user_id.as_str()).unwrap();
+        }
+        Uuid::parse_str(&user_id).expect("Invalid UUID format")
     }
 }
 
