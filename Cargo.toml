@@ -1,6 +1,6 @@
 [package]
 name = "usso"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2021"
 authors = ["hikari <mps.parsa.mps@gmail.com>"]
 description = "The usso provides a universal single sign-on (SSO) integration for microservices, making it easy to add secure, scalable authentication across different frameworks. This client simplifies the process of connecting any microservice to the USSO service."
@@ -9,12 +9,12 @@ readme = "README.md"
 license = "MIT"
 repository = "https://github.com/ussoio/usso.rs.git"
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0.218", features = ["derive"] }
 serde_json = "1.0"
 reqwest = { version = "0.12.12", features = ["blocking", "json"] }
-tokio = { version = "1.0", features = ["full"] }
-jsonwebtoken = "9.3.0"
-uuid = { version = "1.0", features = ["v4"] }
+tokio = { version = "1.43.0", features = ["full"] }
+jsonwebtoken = "9.3.1"
+uuid = { version = "1.14.0", features = ["v4"] }
 base64 = "0.22"
 thiserror = "2.0.11"
 
