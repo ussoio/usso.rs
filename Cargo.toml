@@ -1,6 +1,6 @@
 [package]
 name = "usso"
-version = "0.2.6"
+version = "0.3.0"
 edition = "2021"
 authors = ["hikari <mps.parsa.mps@gmail.com>"]
 description = "The usso provides a universal single sign-on (SSO) integration for microservices, making it easy to add secure, scalable authentication across different frameworks. This client simplifies the process of connecting any microservice to the USSO service."
@@ -14,9 +14,12 @@ serde_json = "1.0"
 reqwest = { version = "0.12.12", features = ["blocking", "json"] }
 tokio = { version = "1.43.0", features = ["full"] }
 jsonwebtoken = "9.3.1"
-uuid = { version = "1.14.0", features = ["v4"] }
+uuid = { version = "1.14.0", features = ["v4", "serde"] }
 base64 = "0.22"
 thiserror = "2.0.11"
+chrono = { version = "0.4", features = ["serde"] }
+ed25519-dalek = { version = "2", features = ["pem"] }
+rand = "0.8"
 
 [dev-dependencies]
 mockall = "0.13.1"

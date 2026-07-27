@@ -3,7 +3,7 @@ use thiserror::Error;
 
 use crate::exceptions::USSOError;
 use crate::schemas::UserData;
-use crate::session::base_session::BaseUssoSession;
+use crate::session::base_session::{BaseUssoSession, SessionError as BaseSessionError};
 
 #[derive(Error, Debug)]
 pub enum SessionError {
@@ -11,6 +11,8 @@ pub enum SessionError {
     HttpError(reqwest::Error),
     #[error("USSO error: {0}")]
     USSOError(USSOError),
+    #[error("Base session error: {0}")]
+    BaseSessionError(#[from] BaseSessionError),
 }
 
 pub struct AsyncUssoSession {
@@ -28,10 +30,10 @@ impl AsyncUssoSession {
         let url = format!("{}/website/users", self.base_session.base_url);
         let response = self
             .base_session
-            .request(Method::GET, &url)
-            .expect("error in fetch");
-        let users: Vec<UserData> = serde_json::from_str(&response)
-            .map_err(|e| SessionError::USSOError(USSOError::Other(e.to_string())))?;
+            .request(Method::GET, &url)?;
+        let users: Vec<UserData> =
+            serde_json::from_str(&response)
+                .map_err(|e| SessionError::USSOError(USSOError::Other(e.to_string())))?;
         Ok(users)
     }
 }

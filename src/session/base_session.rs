@@ -26,7 +26,15 @@ pub struct BaseUssoSession {
 }
 
 impl BaseUssoSession {
-    pub fn new(base_url: &str, api_key: Option<String>, refresh_token: Option<String>) -> Self {
+    pub fn new(
+        base_url: &str,
+        api_key: Option<String>,
+        refresh_token: Option<String>,
+    ) -> Self {
+        let mut headers = HashMap::new();
+        if let Some(ref key) = api_key {
+            headers.insert("x-api-key".to_string(), key.clone());
+        }
         BaseUssoSession {
             client: Client::new(),
             usso: Usso::new(None, None, None),
@@ -34,16 +42,16 @@ impl BaseUssoSession {
             api_key,
             refresh_token,
             access_token: None,
-            headers: HashMap::new(),
+            headers,
         }
     }
 
-    pub fn request(&self, method: Method, url: &String) -> Result<String, SessionError> {
-        let response = self
-            .client
-            .request(method, url)
-            .send()
-            .map_err(SessionError::HttpError)?;
+    pub fn request(&self, method: Method, url: &str) -> Result<String, SessionError> {
+        let mut req = self.client.request(method, url);
+        for (k, v) in &self.headers {
+            req = req.header(k.as_str(), v.as_str());
+        }
+        let response = req.send().map_err(SessionError::HttpError)?;
         response.text().map_err(SessionError::HttpError)
     }
 }
