@@ -18,6 +18,12 @@
 //!
 //! Wildcards (`*`) in path segments and filter values match any value.
 //!
+//! # Types
+//!
+//! | Type | Description |
+//! |------|-------------|
+//! | [`Action`] | Enum for the 9 known privilege levels (Read, Write, Admin, etc.) |
+//!
 //! # Public functions
 //!
 //! | Function | Description |
@@ -37,14 +43,108 @@
 //! # Example
 //!
 //! ```
-//! use usso::authorization::check_access;
+//! use usso::authorization::{Action, check_access};
 //!
 //! let scopes = vec!["admin:users".into(), "read:reports".into()];
-//! assert!(check_access(&scopes, "users", Some("delete"), None, false));
-//! assert!(!check_access(&scopes, "billing", Some("read"), None, false));
+//! assert!(check_access(&scopes, "users", Some(Action::Delete), None, false));
+//! assert!(!check_access(&scopes, "billing", Some(Action::Read), None, false));
 //! ```
 
 use std::collections::HashMap;
+use std::fmt;
+use std::str::FromStr;
+
+/// A known USSO action/privilege level.
+///
+/// Each variant maps to a numeric level used in the hierarchical RBAC engine:
+///
+/// | Variant | Level |
+/// |---------|-------|
+/// | [`None`](Action::None) | 0 |
+/// | [`Read`](Action::Read) | 10 |
+/// | [`Create`](Action::Create) | 20 |
+/// | [`Update`](Action::Update) | 30 |
+/// | [`Delete`](Action::Delete) | 40 |
+/// | [`Manage`](Action::Manage) | 50 |
+/// | [`Admin`](Action::Admin) | 60 |
+/// | [`Owner`](Action::Owner) | 90 |
+/// | [`Superadmin`](Action::Superadmin) | 100 |
+///
+/// Convert from a string via [`FromStr`] or use [`Action::level`] to get the numeric value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    None,
+    Read,
+    Create,
+    Update,
+    Delete,
+    Manage,
+    Admin,
+    Owner,
+    Superadmin,
+}
+
+impl Action {
+    /// Return the numeric privilege level for this action.
+    pub fn level(self) -> i32 {
+        match self {
+            Action::None => 0,
+            Action::Read => 10,
+            Action::Create => 20,
+            Action::Update => 30,
+            Action::Delete => 40,
+            Action::Manage => 50,
+            Action::Admin => 60,
+            Action::Owner => 90,
+            Action::Superadmin => 100,
+        }
+    }
+
+    /// Return the string representation of this action.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Action::None => "none",
+            Action::Read => "read",
+            Action::Create => "create",
+            Action::Update => "update",
+            Action::Delete => "delete",
+            Action::Manage => "manage",
+            Action::Admin => "admin",
+            Action::Owner => "owner",
+            Action::Superadmin => "superadmin",
+        }
+    }
+}
+
+impl FromStr for Action {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "none" => Ok(Action::None),
+            "read" => Ok(Action::Read),
+            "create" => Ok(Action::Create),
+            "update" => Ok(Action::Update),
+            "delete" => Ok(Action::Delete),
+            "manage" => Ok(Action::Manage),
+            "admin" => Ok(Action::Admin),
+            "owner" | "*" => Ok(Action::Owner),
+            "superadmin" => Ok(Action::Superadmin),
+            _ => Err(()),
+        }
+    }
+}
+
+impl fmt::Display for Action {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl AsRef<str> for Action {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
 
 fn privilege_level(action: &str) -> i32 {
     match action {
@@ -214,7 +314,7 @@ pub fn is_filter_match(user_filters: &HashMap<String, String>, requested_filters
 pub fn is_authorized(
     user_scope: &str,
     requested_path: &str,
-    requested_action: Option<&str>,
+    requested_action: Option<Action>,
     requested_filter: Option<&HashMap<String, String>>,
     strict: bool,
 ) -> bool {
@@ -231,11 +331,9 @@ pub fn is_authorized(
     }
 
     if let Some(action) = requested_action {
-        if !action.is_empty() {
-            let user_level = privilege_level(&user_action);
-            let req_level = privilege_level(action);
-            return user_level >= req_level;
-        }
+        let user_level = privilege_level(&user_action);
+        let req_level = action.level();
+        return user_level >= req_level;
     }
 
     true
@@ -248,17 +346,17 @@ pub fn is_authorized(
 /// # Example
 ///
 /// ```
-/// use usso::authorization::check_access;
+/// use usso::authorization::{check_access, Action};
 ///
 /// let scopes = vec!["read:users".into(), "admin:reports".into()];
-/// assert!(check_access(&scopes, "users", Some("read"), None, false));
-/// assert!(check_access(&scopes, "reports", Some("delete"), None, false));
-/// assert!(!check_access(&scopes, "billing", Some("read"), None, false));
+/// assert!(check_access(&scopes, "users", Some(Action::Read), None, false));
+/// assert!(check_access(&scopes, "reports", Some(Action::Delete), None, false));
+/// assert!(!check_access(&scopes, "billing", Some(Action::Read), None, false));
 /// ```
 pub fn check_access(
     user_scopes: &[String],
     resource_path: &str,
-    action: Option<&str>,
+    action: Option<Action>,
     filters: Option<&HashMap<String, String>>,
     strict: bool,
 ) -> bool {
@@ -299,14 +397,14 @@ pub fn has_subset_scope(subset_scope: &str, user_scopes: &[String]) -> bool {
 /// # Example
 ///
 /// ```
-/// use usso::authorization::get_scope_filters;
+/// use usso::authorization::{get_scope_filters, Action};
 ///
 /// let scopes = vec!["read:users?tenant_id=t1".into(), "admin:*".into()];
-/// let filters = get_scope_filters("read", "users", &scopes);
+/// let filters = get_scope_filters(Action::Read, "users", &scopes);
 /// assert_eq!(filters.len(), 2);
 /// ```
-pub fn get_scope_filters(action: &str, resource: &str, user_scopes: &[String]) -> Vec<HashMap<String, String>> {
-    let action_level = privilege_level(action);
+pub fn get_scope_filters(action: Action, resource: &str, user_scopes: &[String]) -> Vec<HashMap<String, String>> {
+    let action_level = action.level();
     let requested_parts: Vec<String> = resource.split('/').map(|s| s.to_string()).collect();
     let mut matched = Vec::new();
     for scope in user_scopes {
@@ -383,16 +481,16 @@ pub fn broadest_scope_filter(filters: &[HashMap<String, String>]) -> HashMap<Str
 ///
 /// ```
 /// use std::collections::HashMap;
-/// use usso::authorization::owner_authorization;
+/// use usso::authorization::{owner_authorization, Action};
 ///
 /// let filter = HashMap::from([("user_id".into(), "u1".into())]);
-/// assert!(owner_authorization(Some(&filter), Some("u1"), None, None, None, None));
+/// assert!(owner_authorization(Some(&filter), Some("u1"), Some(Action::Owner), Some(Action::Read), None, None));
 /// ```
 pub fn owner_authorization(
     requested_filter: Option<&HashMap<String, String>>,
     user_id: Option<&str>,
-    self_action: Option<&str>,
-    action: Option<&str>,
+    self_action: Option<Action>,
+    action: Option<Action>,
     owner_id: Option<&str>,
     workspace_id: Option<&str>,
 ) -> bool {
@@ -404,8 +502,8 @@ pub fn owner_authorization(
             || filter.get("workspace_id").is_some_and(|v| v == uid);
 
         if matches {
-            let user_level = privilege_level(self_action.unwrap_or("read"));
-            let req_level = privilege_level(action.unwrap_or("read"));
+            let user_level = self_action.unwrap_or(Action::Read).level();
+            let req_level = action.unwrap_or(Action::Read).level();
             return user_level >= req_level;
         }
     }

@@ -107,10 +107,10 @@ let token = client.use_agent_token(
 ### Authorization checks
 
 ```rust
-use usso::authorization::check_access;
+use usso::authorization::{check_access, Action};
 
 let scopes = vec!["admin:users".into(), "read:reports".into()];
-let allowed = check_access(&scopes, "users", Some("delete"), None, false);
+let allowed = check_access(&scopes, "users", Some(Action::Delete), None, false);
 ```
 
 ### Axum integration (requires `axum` feature)
@@ -205,6 +205,14 @@ Wildcards (`*`) are supported in path segments and filter values:
 - `read:users/*` matches any sub-resource of users
 - `read:users?region=*` matches any region
 
+### Types
+
+| Type | Description |
+|------|-------------|
+| `Action` | Enum for the 9 known privilege levels (`Action::Read`, `Action::Delete`, `Action::Admin`, etc.) |
+
+Actions can be parsed from strings via `FromStr`, or constructed directly as enum variants.
+
 ### Available functions
 
 | Function | Purpose |
@@ -220,7 +228,7 @@ Wildcards (`*`) are supported in path segments and filter values:
 
 ```rust
 use usso::authorization::{
-    check_access, has_subset_scope, is_authorized, parse_scope,
+    Action, check_access, has_subset_scope, is_authorized, parse_scope,
     owner_authorization, broadest_scope_filter, get_common_scopes,
 };
 
@@ -228,17 +236,17 @@ use usso::authorization::{
 let (action, path, filters) = parse_scope("admin:users/123?region=us-east");
 
 // Check a single scope
-let ok = is_authorized("admin:users", "users", Some("delete"), None, false);
+let ok = is_authorized("admin:users", "users", Some(Action::Delete), None, false);
 
 // Check against multiple scopes
-let ok = check_access(&["admin:users".into()], "users", Some("read"), None, false);
+let ok = check_access(&["admin:users".into()], "users", Some(Action::Read), None, false);
 
 // Check scope containment
 let ok = has_subset_scope("read:users", &["admin:*".into()]);
 
 // Owner authorization
 let filter = std::collections::HashMap::from([("user_id".into(), "u1".into())]);
-let ok = owner_authorization(Some(&filter), Some("u1"), None, None, None, None);
+let ok = owner_authorization(Some(&filter), Some("u1"), Some(Action::Owner), Some(Action::Read), None, None);
 
 // Broadest (least restrictive) filter
 let filters = vec![
