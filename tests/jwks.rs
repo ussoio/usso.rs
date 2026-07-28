@@ -33,7 +33,6 @@ mod tests {
         init_jwks_sync(&jwk_url).expect("Can't init JWKS");
         let jwks = get_jwk_keys().expect("Can't get JWKS");
         assert!(!jwks.keys.is_empty());
-        assert!(jwks.keys.len() > 0);
         assert_eq!(jwks.keys[0].kid, "test-key-1");
 
         mock.assert();

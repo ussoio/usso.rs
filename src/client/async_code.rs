@@ -1,3 +1,5 @@
+//! Asynchronous API client.
+
 use std::collections::HashMap;
 
 use reqwest::Client;
@@ -8,6 +10,7 @@ use crate::core::Usso;
 use crate::exceptions::USSOError;
 use crate::schemas::UserResponse;
 
+/// Errors returned by the sync and async API clients.
 #[derive(Error, Debug)]
 pub enum ClientError {
     #[error("HTTP error: {0}")]
@@ -18,6 +21,26 @@ pub enum ClientError {
     ValueError(String),
 }
 
+/// An asynchronous API client for the USSO backend.
+///
+/// Mirrors the [`sync::UssoClient`](crate::client::sync::UssoClient) API
+/// but uses `async` methods. All methods are prefixed with `async` or are
+/// inherently async.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use usso::client::async_code::AsyncUssoClient;
+///
+/// # async fn example() {
+/// let mut client = AsyncUssoClient::new(
+///     "https://sso.usso.io",
+///     Some("api-key-123".into()),
+///     None, None, None,
+/// );
+/// let users = client.get_users().await.unwrap();
+/// # }
+/// ```
 pub struct AsyncUssoClient {
     pub client: Client,
     pub usso: Usso,

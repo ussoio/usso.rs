@@ -1,3 +1,5 @@
+//! Base session with shared HTTP client and header management.
+
 use std::collections::HashMap;
 
 use reqwest::blocking::Client;
@@ -7,6 +9,7 @@ use thiserror::Error;
 use crate::core::Usso;
 use crate::exceptions::USSOError;
 
+/// Errors returned by session operations.
 #[derive(Error, Debug)]
 pub enum SessionError {
     #[error("HTTP error: {0}")]
@@ -15,6 +18,10 @@ pub enum SessionError {
     USSOError(USSOError),
 }
 
+/// Base session holding an HTTP client, headers, and credentials.
+///
+/// Used internally by [`UssoSession`](crate::session::sync::UssoSession) and
+/// [`AsyncUssoSession`](crate::session::async_code::AsyncUssoSession).
 pub struct BaseUssoSession {
     pub client: Client,
     pub usso: Usso,
@@ -26,6 +33,11 @@ pub struct BaseUssoSession {
 }
 
 impl BaseUssoSession {
+    /// Create a new `BaseUssoSession`.
+    ///
+    /// - `base_url` — the USSO server base URL
+    /// - `api_key` — optional API key (sets `x-api-key` header)
+    /// - `refresh_token` — optional refresh token
     pub fn new(
         base_url: &str,
         api_key: Option<String>,
@@ -46,6 +58,9 @@ impl BaseUssoSession {
         }
     }
 
+    /// Send an HTTP request with the configured headers.
+    ///
+    /// Returns the response body as a string.
     pub fn request(&self, method: Method, url: &str) -> Result<String, SessionError> {
         let mut req = self.client.request(method, url);
         for (k, v) in &self.headers {

@@ -1,3 +1,49 @@
+//! Scope-based authorization (RBAC) engine.
+//!
+//! Scopes follow the format: `<action>:<resource>/<path>?<filters>`
+//!
+//! # Privilege hierarchy
+//!
+//! | Level | Value |
+//! |-------|-------|
+//! | `none` | 0 |
+//! | `read` | 10 |
+//! | `create` | 20 |
+//! | `update` | 30 |
+//! | `delete` | 40 |
+//! | `manage` | 50 |
+//! | `admin` | 60 |
+//! | `owner` / `*` | 90 |
+//! | `superadmin` | 100 |
+//!
+//! Wildcards (`*`) in path segments and filter values match any value.
+//!
+//! # Public functions
+//!
+//! | Function | Description |
+//! |----------|-------------|
+//! | [`parse_scope`] | Parse a scope string into (action, path, filters) |
+//! | [`check_access`] | Check if any scope grants access to a resource |
+//! | [`is_authorized`] | Check if a single scope grants access |
+//! | [`has_subset_scope`] | Check if any scope can delegate a subset scope |
+//! | [`is_subset_scope`] | Check if one scope is a subset of another |
+//! | [`is_path_match`] | Match resource paths with wildcard support |
+//! | [`is_filter_match`] | Match filter dicts with wildcard support |
+//! | [`get_scope_filters`] | Extract filters from scopes matching action+resource |
+//! | [`broadest_scope_filter`] | Return the least restrictive filter from a list |
+//! | [`owner_authorization`] | Owner-level authorization check against user/owner/workspace IDs |
+//! | [`get_common_scopes`] | Intersection of two scope lists |
+//!
+//! # Example
+//!
+//! ```
+//! use usso::authorization::check_access;
+//!
+//! let scopes = vec!["admin:users".into(), "read:reports".into()];
+//! assert!(check_access(&scopes, "users", Some("delete"), None, false));
+//! assert!(!check_access(&scopes, "billing", Some("read"), None, false));
+//! ```
+
 use std::collections::HashMap;
 
 fn privilege_level(action: &str) -> i32 {
@@ -15,6 +61,20 @@ fn privilege_level(action: &str) -> i32 {
     }
 }
 
+/// Parse a scope string into its components.
+///
+/// Returns `(action, path_segments, filters)`.
+///
+/// # Examples
+///
+/// ```
+/// use usso::authorization::parse_scope;
+///
+/// let (action, path, filters) = parse_scope("admin:users/123?region=us-east");
+/// assert_eq!(action, "admin");
+/// assert_eq!(path, ["users", "123"]);
+/// assert_eq!(filters.get("region").unwrap(), "us-east");
+/// ```
 pub fn parse_scope(scope: &str) -> (String, Vec<String>, HashMap<String, String>) {
     let colon_idx = scope.find(':');
     let question_idx = scope.find('?').unwrap_or(scope.len());
@@ -119,12 +179,18 @@ fn wildcard_match(text: &str, pattern: &str) -> bool {
     true
 }
 
+/// Check whether a user's path matches a requested resource path.
+///
+/// Supports wildcard segments (`*`) in either path.
 pub fn is_path_match(user_path: &[String], requested_path: &[String], strict: bool) -> bool {
     let user_parts = normalize_path(user_path);
     let req_parts = normalize_path(requested_path);
     match_path_parts(&user_parts, &req_parts, strict)
 }
 
+/// Check whether all of a user's filters are satisfied by the requested filters.
+///
+/// Supports wildcard values (`*`) in user filters.
 pub fn is_filter_match(user_filters: &HashMap<String, String>, requested_filters: &HashMap<String, String>) -> bool {
     for (k, v) in user_filters {
         match requested_filters.get(k) {
@@ -139,6 +205,12 @@ pub fn is_filter_match(user_filters: &HashMap<String, String>, requested_filters
     true
 }
 
+/// Check whether a single user scope grants access to a specific resource.
+///
+/// This is the core authorization check. It verifies:
+/// - Path match (with wildcard support)
+/// - Filter match (with wildcard support)
+/// - Action privilege level (hierarchical)
 pub fn is_authorized(
     user_scope: &str,
     requested_path: &str,
@@ -169,6 +241,20 @@ pub fn is_authorized(
     true
 }
 
+/// Check whether ANY of the user's scopes grant access to a resource.
+///
+/// Returns `true` if at least one scope satisfies the request.
+///
+/// # Example
+///
+/// ```
+/// use usso::authorization::check_access;
+///
+/// let scopes = vec!["read:users".into(), "admin:reports".into()];
+/// assert!(check_access(&scopes, "users", Some("read"), None, false));
+/// assert!(check_access(&scopes, "reports", Some("delete"), None, false));
+/// assert!(!check_access(&scopes, "billing", Some("read"), None, false));
+/// ```
 pub fn check_access(
     user_scopes: &[String],
     resource_path: &str,
@@ -184,6 +270,18 @@ pub fn check_access(
     false
 }
 
+/// Check whether any user scope contains (is a superset of) the given scope.
+///
+/// Useful for checking if a user has permission to delegate a scope.
+///
+/// # Example
+///
+/// ```
+/// use usso::authorization::has_subset_scope;
+///
+/// let scopes = vec!["admin:*".into()];
+/// assert!(has_subset_scope("read:users", &scopes));
+/// ```
 pub fn has_subset_scope(subset_scope: &str, user_scopes: &[String]) -> bool {
     for user_scope in user_scopes {
         if is_subset_scope(subset_scope, user_scope) {
@@ -193,6 +291,176 @@ pub fn has_subset_scope(subset_scope: &str, user_scopes: &[String]) -> bool {
     false
 }
 
+/// Return filters extracted from user scopes that match the given action and resource.
+///
+/// Filters are extracted from scopes whose privilege level >= requested action
+/// and whose resource path matches the requested resource.
+///
+/// # Example
+///
+/// ```
+/// use usso::authorization::get_scope_filters;
+///
+/// let scopes = vec!["read:users?tenant_id=t1".into(), "admin:*".into()];
+/// let filters = get_scope_filters("read", "users", &scopes);
+/// assert_eq!(filters.len(), 2);
+/// ```
+pub fn get_scope_filters(action: &str, resource: &str, user_scopes: &[String]) -> Vec<HashMap<String, String>> {
+    let action_level = privilege_level(action);
+    let requested_parts: Vec<String> = resource.split('/').map(|s| s.to_string()).collect();
+    let mut matched = Vec::new();
+    for scope in user_scopes {
+        let (scope_action, scope_path, scope_filters) = parse_scope(scope);
+        let scope_level = privilege_level(&scope_action);
+        if scope_level < action_level {
+            continue;
+        }
+        if !is_path_match(&scope_path, &requested_parts, false) {
+            continue;
+        }
+        matched.push(scope_filters);
+    }
+    matched
+}
+
+/// Return the broadest (most restrictive) scope filter from a list.
+///
+/// Scores each filter by its restriction keys:
+/// - `tenant_id` = 1, `workspace_id` = 2, `user_id` = 4, `uid` = 8
+/// - Unknown keys = 16
+/// - Empty filter scores 0 (least restrictive)
+///
+/// The filter with the **lowest** score is the most restrictive.
+///
+/// # Example
+///
+/// ```
+/// use std::collections::HashMap;
+/// use usso::authorization::broadest_scope_filter;
+///
+/// let filters = vec![
+///     HashMap::from([("tenant_id".into(), "t1".into()), ("user_id".into(), "u1".into())]),  // score = 5
+///     HashMap::from([("tenant_id".into(), "t1".into())]),                                    // score = 1 (broadest)
+/// ];
+/// let broadest = broadest_scope_filter(&filters);
+/// assert_eq!(broadest.get("tenant_id").unwrap(), "t1");
+/// assert!(broadest.get("user_id").is_none());
+/// ```
+pub fn broadest_scope_filter(filters: &[HashMap<String, String>]) -> HashMap<String, String> {
+    fn restriction_score(f: &HashMap<String, String>) -> i32 {
+        if f.is_empty() {
+            return 0;
+        }
+        let restriction_bits: [(&str, i32); 4] = [
+            ("tenant_id", 1),
+            ("workspace_id", 2),
+            ("user_id", 4),
+            ("uid", 8),
+        ];
+        let default_bit = 16;
+        f.keys().fold(0, |acc, k| {
+            acc + restriction_bits
+                .iter()
+                .find(|(name, _)| *name == k)
+                .map(|(_, v)| *v)
+                .unwrap_or(default_bit)
+        })
+    }
+
+    filters
+        .iter()
+        .min_by_key(|f| restriction_score(f))
+        .cloned()
+        .unwrap_or_default()
+}
+
+/// Check owner-level authorization for a resource.
+///
+/// Grants access if the requested resource filter matches the user's ID
+/// (or owner_id / workspace_id) and the user's privilege level is sufficient.
+///
+/// # Example
+///
+/// ```
+/// use std::collections::HashMap;
+/// use usso::authorization::owner_authorization;
+///
+/// let filter = HashMap::from([("user_id".into(), "u1".into())]);
+/// assert!(owner_authorization(Some(&filter), Some("u1"), None, None, None, None));
+/// ```
+pub fn owner_authorization(
+    requested_filter: Option<&HashMap<String, String>>,
+    user_id: Option<&str>,
+    self_action: Option<&str>,
+    action: Option<&str>,
+    owner_id: Option<&str>,
+    workspace_id: Option<&str>,
+) -> bool {
+    let uid = owner_id.or(user_id).or(workspace_id);
+
+    if let (Some(uid), Some(filter)) = (uid, requested_filter) {
+        let matches = filter.get("owner_id").is_some_and(|v| v == uid)
+            || filter.get("user_id").is_some_and(|v| v == uid)
+            || filter.get("workspace_id").is_some_and(|v| v == uid);
+
+        if matches {
+            let user_level = privilege_level(self_action.unwrap_or("read"));
+            let req_level = privilege_level(action.unwrap_or("read"));
+            return user_level >= req_level;
+        }
+    }
+    false
+}
+
+/// Get common scopes between two scope lists.
+///
+/// Removes scopes from `scopes_a` that are not permitted by `scopes_b`,
+/// and adds any permitted scopes from `scopes_b` that are subsets of
+/// the removed scopes.
+///
+/// # Example
+///
+/// ```
+/// use usso::authorization::get_common_scopes;
+///
+/// let a = vec!["admin:users".into(), "read:reports".into()];
+/// let b = vec!["read:users".into()];
+/// let common = get_common_scopes(&a, &b);
+/// assert!(common.contains(&"read:users".to_string()));
+/// ```
+pub fn get_common_scopes(scopes_a: &[String], scopes_b: &[String]) -> Vec<String> {
+    let not_permitted: Vec<String> = scopes_a
+        .iter()
+        .filter(|scope| !has_subset_scope(scope, scopes_b))
+        .cloned()
+        .collect();
+
+    if not_permitted.is_empty() {
+        return scopes_a.to_vec();
+    }
+
+    let new_permitted: Vec<String> = scopes_b
+        .iter()
+        .filter(|scope| has_subset_scope(scope, &not_permitted))
+        .cloned()
+        .collect();
+
+    let mut result: Vec<String> = scopes_a
+        .iter()
+        .filter(|s| !not_permitted.contains(s))
+        .cloned()
+        .collect();
+    result.extend(new_permitted);
+    result.sort();
+    result.dedup();
+    result
+}
+
+/// Check whether one scope is a subset of another (i.e. `subset_scope` is
+/// implied by `super_scope`).
+///
+/// A scope A is a subset of scope B if B has equal or higher privilege, the
+/// paths match, and B's filters are a superset of A's filters.
 pub fn is_subset_scope(subset_scope: &str, super_scope: &str) -> bool {
     let (child_action, child_path, child_filters) = parse_scope(subset_scope);
     let (parent_action, parent_path, parent_filters) = parse_scope(super_scope);

@@ -1,3 +1,5 @@
+//! Synchronous (blocking) API client.
+
 use std::collections::HashMap;
 
 use reqwest::blocking::Client;
@@ -8,6 +10,7 @@ use crate::core::Usso;
 use crate::exceptions::USSOError;
 use crate::schemas::UserResponse;
 
+/// Errors returned by the sync and async API clients.
 #[derive(Error, Debug)]
 pub enum ClientError {
     #[error("HTTP error: {0}")]
@@ -18,6 +21,23 @@ pub enum ClientError {
     ValueError(String),
 }
 
+/// A synchronous (blocking) API client for the USSO backend.
+///
+/// Supports API key, agent JWT, and refresh-token-based authentication.
+/// Automatically manages access tokens and provides user management APIs.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use usso::client::sync::UssoClient;
+///
+/// let mut client = UssoClient::new(
+///     "https://sso.usso.io",
+///     Some("api-key-123".into()),
+///     None, None, None,
+/// );
+/// let users = client.get_users().unwrap();
+/// ```
 pub struct UssoClient {
     pub client: Client,
     pub usso: Usso,
@@ -32,6 +52,13 @@ pub struct UssoClient {
 }
 
 impl UssoClient {
+    /// Create a new `UssoClient`.
+    ///
+    /// - `base_url` — the USSO server base URL (e.g. `https://sso.usso.io`)
+    /// - `api_key` — optional API key for API-key auth
+    /// - `agent_id` — optional agent ID for agent JWT auth
+    /// - `agent_private_key` — optional Ed25519 private key (PEM or raw 32-byte seed)
+    /// - `refresh_token` — optional refresh token for token-refresh auth
     pub fn new(
         base_url: &str,
         api_key: Option<String>,
@@ -60,6 +87,7 @@ impl UssoClient {
         }
     }
 
+    /// Check whether the cached access token is not expired.
     pub fn is_temporally_valid(&self) -> bool {
         match &self.access_token {
             Some(token) => crate::core::is_expired(token).map(|expired| !expired).unwrap_or(false),
@@ -67,6 +95,10 @@ impl UssoClient {
         }
     }
 
+    /// Ensure a valid session exists.
+    ///
+    /// If an API key is set, this is a no-op. Otherwise refreshes the access
+    /// token if it is missing or expired.
     pub fn get_session(&mut self) -> Result<(), ClientError> {
         if self.api_key.is_some() {
             return Ok(());
@@ -77,6 +109,9 @@ impl UssoClient {
         Ok(())
     }
 
+    /// Refresh the access token using the configured refresh token.
+    ///
+    /// Sends a POST to `{base}/api/sso/v1/auth/refresh`.
     pub fn refresh(&mut self) -> Result<(), ClientError> {
         let token = self
             .refresh_token
@@ -106,6 +141,7 @@ impl UssoClient {
         Ok(())
     }
 
+    /// Fetch users from `GET {base}/api/sso/v1/users`.
     pub fn get_users(&self) -> Result<Vec<UserResponse>, ClientError> {
         let url = format!("{}/api/sso/v1/users", self.base_url);
         let mut req = self.client.get(&url);
@@ -127,6 +163,7 @@ impl UssoClient {
             .collect()
     }
 
+    /// Create a user via `POST {base}/api/sso/v1/users`.
     pub fn create_users(&self, data: Option<Value>) -> Result<UserResponse, ClientError> {
         let url = format!("{}/api/sso/v1/users", self.base_url);
         let mut req = self.client.post(&url);
@@ -142,6 +179,7 @@ impl UssoClient {
             .map_err(ClientError::HttpError)
     }
 
+    /// Get a user's profile via `GET {base}/api/sso/v1/profiles/{user_id}`.
     pub fn get_profile(&self, user_id: &str) -> Result<Value, ClientError> {
         let url = format!("{}/api/sso/v1/profiles/{}", self.base_url, user_id);
         let mut req = self.client.get(&url);
@@ -152,6 +190,9 @@ impl UssoClient {
         response.json::<Value>().map_err(ClientError::HttpError)
     }
 
+    /// Add an identifier (email, phone, etc.) to a user.
+    ///
+    /// Sends `POST {base}/api/sso/v1/users/{user_id}/identifiers`.
     pub fn add_identifier(
         &self,
         user_id: &str,
@@ -170,6 +211,10 @@ impl UssoClient {
         response.json::<Value>().map_err(ClientError::HttpError)
     }
 
+    /// Generate an Ed25519-signed agent JWT and exchange it for a USSO access token.
+    ///
+    /// The agent must have `agent_id` and `agent_private_key` configured.
+    /// The private key can be a PEM-encoded PKCS#8 key or a raw 32-byte seed.
     pub fn use_agent_token(
         &mut self,
         scopes: &[String],
@@ -255,6 +300,13 @@ impl UssoClient {
         response.json::<Value>().map_err(ClientError::HttpError)
     }
 
+    /// Resolve the effective scopes for the current session.
+    ///
+    /// Tries the following sources in order:
+    /// 1. Decoded access token payload
+    /// 2. API key scopes (via `POST /api/sso/v1/apikeys/verify`)
+    /// 3. Agent scopes (via `POST /api/sso/v1/agents/scopes`)
+    /// 4. Refresh token (if a token refresh yields scopes)
     pub fn get_scopes(&mut self) -> Result<Vec<String>, ClientError> {
         if let Some(ref token) = self.access_token {
             let parts: Vec<&str> = token.split('.').collect();
@@ -330,6 +382,11 @@ impl UssoClient {
         Ok(vec![])
     }
 
+    /// Request a token with specific scopes.
+    ///
+    /// First verifies that the current session's scopes contain the requested
+    /// scopes (via [`has_subset_scope`](crate::authorization::has_subset_scope)).
+    /// Then exchanges an agent JWT for an access token with those scopes.
     pub fn get_token(
         &mut self,
         scopes: &[String],

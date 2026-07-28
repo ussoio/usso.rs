@@ -1,3 +1,8 @@
+//! Agent JWT generation and token exchange.
+//!
+//! Agents authenticate to USSO by generating a self-signed Ed25519 JWT and
+//! exchanging it for an access token.
+
 use base64::Engine;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -5,6 +10,17 @@ use uuid::Uuid;
 use ed25519_dalek::{Signer, SigningKey};
 use ed25519_dalek::pkcs8::DecodePrivateKey;
 
+/// Generate a self-signed Ed25519 agent JWT.
+///
+/// The JWT has a 5-minute expiry and includes claims for `iss`, `scopes`,
+/// `aud`, `exp`, `nbf`, `iat`, and `jti`.
+///
+/// The private key can be provided as a PEM-encoded PKCS#8 key
+/// (`-----BEGIN PRIVATE KEY-----`) or as a raw 32-byte seed string.
+///
+/// # Panics
+///
+/// Panics if `agent_id` or `private_key` is `None`.
 pub fn generate_agent_jwt(
     scopes: &[String],
     aud: &str,
@@ -58,6 +74,11 @@ pub fn generate_agent_jwt(
     }
 }
 
+/// Exchange a self-signed agent JWT for a USSO access token (blocking).
+///
+/// Sends a POST to `{base_url}/api/sso/v1/agents/auth` with the agent JWT
+/// in the `Authorization: Bearer` header. Returns the `access` token from
+/// the response's `tokens` object.
 pub fn get_agent_token(jwt: &str, base_url: &str) -> Result<String, crate::client::sync::ClientError> {
     let client = reqwest::blocking::Client::new();
     let url = format!("{}/api/sso/v1/agents/auth", base_url);
@@ -82,6 +103,7 @@ pub fn get_agent_token(jwt: &str, base_url: &str) -> Result<String, crate::clien
         })
 }
 
+/// Exchange a self-signed agent JWT for a USSO access token (async).
 pub async fn get_agent_token_async(
     jwt: &str,
     base_url: &str,

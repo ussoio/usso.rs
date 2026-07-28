@@ -1,9 +1,28 @@
+//! JWKS (JSON Web Key Set) fetching and caching.
+//!
+//! Provides both synchronous and asynchronous functions to fetch JWKS from a
+//! remote URL. Keys are cached globally in a [`OnceLock`] so that multiple
+//! token validations reuse the same key set without redundant HTTP calls.
+//!
+//! # Example
+//!
+//! ```rust,no_run
+//! use usso::jwks::init_jwks_sync;
+//!
+//! init_jwks_sync("https://sso.usso.io/website/jwks.json").unwrap();
+//! let keys = usso::jwks::get_jwk_keys().unwrap();
+//! println!("Loaded {} keys", keys.keys.len());
+//! ```
+
 use crate::{exceptions::JwksError, schemas::Jwks};
 use reqwest::header::{HeaderMap, HeaderValue, USER_AGENT};
 use std::sync::OnceLock;
 
 static JWKS_CACHE: OnceLock<Jwks> = OnceLock::new();
 
+/// Fetch JWKS from a URL and store it in the global cache (blocking).
+///
+/// Must be called before [`get_jwk_keys`] or [`decode_token_with_jwks`](crate::core::decode_token_with_jwks).
 pub fn init_jwks_sync(jwk_url: &str) -> Result<(), JwksError> {
     let jwks = fetch_jwks_sync(jwk_url)?;
     JWKS_CACHE
@@ -12,6 +31,9 @@ pub fn init_jwks_sync(jwk_url: &str) -> Result<(), JwksError> {
     Ok(())
 }
 
+/// Fetch JWKS from the given URL (blocking) without caching.
+///
+/// Sets a `User-Agent` header identifying the crate name, version, and repository.
 pub fn fetch_jwks_sync(jwk_url: &str) -> Result<Jwks, JwksError> {
     let user_agent = format!(
         "{}/{} (+{})",
@@ -42,6 +64,9 @@ pub fn fetch_jwks_sync(jwk_url: &str) -> Result<Jwks, JwksError> {
     Ok(jwks)
 }
 
+/// Fetch JWKS from a URL and store it in the global cache (async).
+///
+/// Must be called before [`get_jwk_keys`] or [`decode_token_with_jwks`](crate::core::decode_token_with_jwks).
 pub async fn init_jwks_async(jwk_url: &str) -> Result<(), JwksError> {
     let jwks = fetch_jwks_async(jwk_url).await?;
     JWKS_CACHE
@@ -50,7 +75,9 @@ pub async fn init_jwks_async(jwk_url: &str) -> Result<(), JwksError> {
     Ok(())
 }
 
-/// Fetches the JWKS from the provided URL using async I/O.
+/// Fetch JWKS from the given URL (async) without caching.
+///
+/// Sets a `User-Agent` header identifying the crate name, version, and repository.
 pub async fn fetch_jwks_async(jwk_url: &str) -> Result<Jwks, JwksError> {
     let user_agent = format!(
         "{}/{} (+{})",
@@ -80,6 +107,10 @@ pub async fn fetch_jwks_async(jwk_url: &str) -> Result<Jwks, JwksError> {
     Ok(jwks)
 }
 
+/// Get a reference to the globally cached JWKS key set.
+///
+/// Returns `JwksError::NotInitialized` if [`init_jwks_sync`] or
+/// [`init_jwks_async`] has not been called yet.
 pub fn get_jwk_keys() -> Result<&'static Jwks, JwksError> {
     JWKS_CACHE.get().ok_or(JwksError::NotInitialized)
 }
