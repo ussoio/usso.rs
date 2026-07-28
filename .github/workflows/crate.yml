@@ -28,4 +28,4 @@ jobs:
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO }}
-        run: cargo publish --token $CARGO_REGISTRY_TOKEN -j $(nproc)
+        run: cargo publish -j $(nproc)
